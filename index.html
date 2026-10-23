@@ -272,10 +272,12 @@
      pos       4 posições do poste; control = text | choice | select
    posFrom: 'circuitos_posicao'  a pergunta só mostra as posições
                que têm circuito informado na pergunta 3
+   posIf: (v, k) => true/false   condição extra por posição
+               (ex.: só onde a pergunta 7 for SIM); noneHint = aviso
    showIf: { pergunta: valor } ou função (v) => true/false
                libera a pergunta só nessa condição (condHint = aviso)
    ========================================================= */
-const FORM_VERSION = 2;
+const FORM_VERSION = 3;
 
 /* Regra das perguntas de posição (exceto a 3):
    'todas'  -> toda posição liberada pela pergunta 3 precisa ser respondida
@@ -310,15 +312,19 @@ const QUESTIONS = [
   { id: 'estado_montagem', n: 6, title: 'Estado da montagem', type: 'pos', control: 'choice', options: REG_IRREG, posFrom: P3 },
   { id: 'para_raios', n: 7, title: 'Existe Para-Raios?', type: 'pos', control: 'choice', options: SIM_NAO, posFrom: P3 },
   { id: 'qtd_para_raios', n: 8, title: 'Quantos Para-Raios?', type: 'pos', control: 'select', options: nums(0, 6), posFrom: P3 },
-  { id: 'estado_para_raio', n: 9, title: 'Estado da Montagem do Para-Raio', type: 'pos', control: 'choice', options: REG_IRREG, posFrom: P3 },
+  { id: 'estado_para_raio', n: 9, title: 'Estado da Montagem do Para-Raio', type: 'pos', control: 'choice', options: REG_IRREG, posFrom: P3,
+    posIf: (v, k) => v.para_raios[k] === 'SIM', hint: 'Aparece nas posições com SIM na pergunta 7', noneHint: 'Nenhuma posição com SIM na pergunta 7.' },
   { id: 'aterramento_temp', n: 10, title: 'Existe Ponto de Aterramento Temporário?', type: 'pos', control: 'choice', options: SIM_NAO, posFrom: P3 },
-  { id: 'estado_aterramento_temp', n: 11, title: 'Qual estado do Aterramento Temporário?', type: 'pos', control: 'choice', options: ['REGULAR', 'IRREGULAR', 'NA'], posFrom: P3 },
+  { id: 'estado_aterramento_temp', n: 11, title: 'Qual estado do Aterramento Temporário?', type: 'pos', control: 'choice', options: REG_IRREG, posFrom: P3,
+    posIf: (v, k) => v.aterramento_temp[k] === 'SIM', hint: 'Aparece nas posições com SIM na pergunta 10', noneHint: 'Nenhuma posição com SIM na pergunta 10.' },
   { id: 'emenda', n: 12, title: 'Existe Emenda?', type: 'choice', options: SIM_NAO, required: true },
   { id: 'local_emenda', n: 13, title: 'A emenda é no poste ou no vão anterior?', type: 'choice', options: ['POSTE', 'VÃO ANTERIOR'], required: true, showIf: { emenda: 'SIM' } },
   { id: 'tipo_emenda', n: 14, title: 'Tipo de Emenda', type: 'select', options: ['LUVA', 'CUNHA', 'CAPA', 'PERFURANTE', 'OUTRO'], other: 'OUTRO', required: true, showIf: { emenda: 'SIM' } },
   { id: 'circuito_emenda', n: 15, title: 'Circuito da Emenda', type: 'pos', control: 'choice', options: ['SIM', 'NAO', 'NA'], posFrom: P3, showIf: { emenda: 'SIM' } },
   { id: 'qtd_espacadores', n: 16, title: 'Quantos Espaçadores no vão anterior?', type: 'pos', control: 'select', options: [...nums(0, 12), 'NA'], posFrom: P3 },
-  { id: 'tipo_espacador', n: 17, title: 'Tipo do Espaçador', type: 'pos', control: 'choice', options: ['PLP', 'ANCORA'], posFrom: P3 },
+  { id: 'tipo_espacador', n: 17, title: 'Tipo do Espaçador', type: 'pos', control: 'choice', options: ['PLP', 'ANCORA', 'OUTRA'], other: 'OUTRA', posFrom: P3,
+    posIf: (v, k) => v.qtd_espacadores[k] !== '' && v.qtd_espacadores[k] !== '0',
+    hint: 'Aparece nas posições em que a pergunta 16 for diferente de 0', noneHint: 'Nenhuma posição com espaçador (diferente de 0) na pergunta 16.' },
   { id: 'baixa_tensao', n: 18, title: 'Existe Baixa Tensão?', type: 'choice', options: SIM_NAO, required: true },
   { id: 'iluminacao_viaria', n: 19, title: 'Existe Iluminação Viária?', type: 'choice', options: SIM_NAO, required: true },
   { id: 'fibra_optica', n: 20, title: 'Existe Fibra Óptica?', type: 'choice', options: SIM_NAO, required: true },
@@ -379,7 +385,7 @@ function emptyValues() {
   const v = {};
   for (const q of QUESTIONS) {
     v[q.id] = q.type === 'pos' ? Object.fromEntries(POS.map((p) => [p.k, ''])) : '';
-    if (q.other) v[q.id + '_outro'] = '';
+    if (q.other) v[q.id + '_outro'] = q.type === 'pos' ? Object.fromEntries(POS.map((p) => [p.k, ''])) : '';
   }
   return v;
 }
@@ -401,7 +407,8 @@ const isEnabled = (q) => !q.showIf || (typeof q.showIf === 'function'
   ? q.showIf(values)
   : Object.entries(q.showIf).every(([k, v]) => values[k] === v));
 // A posição está liberada? (depende do que foi preenchido na pergunta 3)
-const posOn = (q, k) => !q.posFrom || String(values[q.posFrom][k]).trim() !== '';
+const hasCircuit = (q, k) => !q.posFrom || String(values[q.posFrom][k]).trim() !== '';
+const posOn = (q, k) => hasCircuit(q, k) && (!q.posIf || q.posIf(values, k));
 const activePos = (q) => POS.filter((p) => posOn(q, p.k));
 const cardOf = (id) => form.querySelector(`.q[data-q="${id}"]`);
 
@@ -446,9 +453,10 @@ function renderForm() {
         return `<div class="pos-row" data-pos-row="${p.k}">
           <div class="pos-label">${ico}${p.n} · ${p.label}<span class="pos-circ"></span></div>
           ${controlHTML(q, q.id, p.k, q.control, q.options, `${q.title} - ${p.label}`)}
+          ${q.other ? `<input class="inp other" type="text" data-field="${q.id}_outro" data-pos="${p.k}" placeholder="Descreva o outro tipo…" aria-label="${esc(q.title)} - ${p.label} - outro" autocapitalize="characters" hidden>` : ''}
         </div>`;
       }).join('');
-      if (q.posFrom) body += `<div class="pos-none">Preencha a pergunta ${qById[q.posFrom].n} para liberar as posições.</div>`;
+      if (q.posFrom) body += `<div class="pos-none"></div>`;
     } else {
       body = controlHTML(q, q.id, null, q.type, q.options, q.title);
       if (q.other) body += `<input class="inp other" type="text" data-field="${q.id}_outro" placeholder="Descreva o outro…" aria-label="${esc(q.title)} - outro" autocapitalize="characters" hidden>`;
@@ -493,7 +501,7 @@ function syncUI() {
         setErr(q.id, '');
       }
     }
-    if (q.other) {
+    if (q.other && q.type !== 'pos') {
       const box = form.querySelector(`[data-field="${q.id}_outro"]`);
       const show = values[q.id] === q.other;
       box.hidden = !show;
@@ -513,9 +521,15 @@ function syncUI() {
         $$('input,select,button', row).forEach((el) => { el.disabled = !on || !qOn; });
         row.classList.toggle('filled', on && String(values[q.id][p.k]).trim() !== '');
         if (q.posFrom) row.querySelector('.pos-circ').textContent = on ? ` — ${String(values[q.posFrom][p.k]).trim()}` : '';
+        if (q.other) row.querySelector(`[data-field="${q.id}_outro"]`).hidden = !(on && values[q.id][p.k] === q.other);
       }
       const none = card.querySelector('.pos-none');
-      if (none) none.hidden = shown > 0;
+      if (none) {
+        none.hidden = shown > 0;
+        none.textContent = POS.some((p) => hasCircuit(q, p.k))
+          ? (q.noneHint || 'Nenhuma posição liberada.')
+          : `Preencha a pergunta ${qById[q.posFrom].n} para liberar as posições.`;
+      }
     }
   }
   $$('.chip', form).forEach((b) => {
@@ -582,7 +596,11 @@ function validateOne(q) {
       msg = (q.type === 'choice' || q.type === 'select') ? 'Selecione uma opção.' : 'Campo obrigatório.';
     }
     if (!msg && q.numeric && v && !/^\d+$/.test(v)) msg = 'Use apenas números.';
-    if (!msg && q.other && v === q.other && !values[q.id + '_outro'].trim()) msg = 'Descreva qual é o "OUTRO".';
+    if (!msg && q.other && q.type !== 'pos' && v === q.other && !values[q.id + '_outro'].trim()) msg = `Descreva qual é o "${q.other}".`;
+    if (!msg && q.other && q.type === 'pos') {
+      const semDesc = activePos(q).filter((p) => v[p.k] === q.other && !String(values[q.id + '_outro'][p.k]).trim());
+      if (semDesc.length) msg = `Descreva o "${q.other}" na posição ${semDesc.map((p) => p.n).join(', ')}.`;
+    }
   }
   setErr(q.id, msg);
   return !msg;
@@ -602,7 +620,12 @@ function snapshot() {
     r[q.id] = q.type === 'pos'
       ? Object.fromEntries(POS.map((p) => [p.k, on && posOn(q, p.k) ? String(v[p.k]).trim() : '']))
       : (on ? String(v).trim() : '');
-    if (q.other) r[q.id + '_outro'] = on && v === q.other ? values[q.id + '_outro'].trim() : '';
+    if (q.other && q.type === 'pos') {
+      r[q.id + '_outro'] = Object.fromEntries(POS.map((p) => [p.k,
+        on && posOn(q, p.k) && v[p.k] === q.other ? String(values[q.id + '_outro'][p.k]).trim() : '']));
+    } else if (q.other) {
+      r[q.id + '_outro'] = on && v === q.other ? values[q.id + '_outro'].trim() : '';
+    }
   }
   return r;
 }
@@ -734,8 +757,10 @@ const TAIL_COLS = ['id', 'criado_em', 'atualizado_em', 'versao_form'];
 function columns() {
   const cols = [...HEAD_COLS];
   for (const q of QUESTIONS) {
-    if (q.type === 'pos') POS.forEach((p) => cols.push(`${q.id}_${p.k}`));
-    else { cols.push(q.id); if (q.other) cols.push(q.id + '_outro'); }
+    if (q.type === 'pos') {
+      POS.forEach((p) => cols.push(`${q.id}_${p.k}`));
+      if (q.other) POS.forEach((p) => cols.push(`${q.id}_outro_${p.k}`));
+    } else { cols.push(q.id); if (q.other) cols.push(q.id + '_outro'); }
   }
   return cols.concat(TAIL_COLS);
 }
