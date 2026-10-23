@@ -115,6 +115,23 @@
   .pos-ico i { width: 8px; height: 8px; border-radius: 2px; background: var(--line); }
   .pos-ico i.on { background: var(--acc); }
   .pos-row.filled .pos-label { color: var(--ink); }
+  .pos-circ { color: var(--pri); font-weight: 700; overflow-wrap: anywhere; }
+  .pos-none { color: var(--muted); font-size: 14px; padding: 10px 12px; border: 1.5px dashed var(--line); border-radius: 10px; }
+  .q-num.small { font-size: 11px; letter-spacing: -.3px; }
+
+  /* GPS */
+  .gps { display: flex; align-items: center; gap: 12px; background: var(--card); border: 1.5px solid var(--line);
+    border-radius: 14px; padding: 12px 14px; margin: 10px 0; }
+  .gps .grow { flex: 1; min-width: 0; }
+  .gps-title { font-weight: 700; font-size: 14px; }
+  .gps-text { font-size: 14px; color: var(--muted); overflow-wrap: anywhere; }
+  .gps-dot { flex: none; width: 12px; height: 12px; border-radius: 50%; background: var(--acc); }
+  .gps[data-state="ok"] .gps-dot { background: var(--ok); }
+  .gps[data-state="ok"] .gps-text { color: var(--ink); }
+  .gps[data-state="error"] { border-color: var(--err); }
+  .gps[data-state="error"] .gps-dot { background: var(--err); }
+  .gps[data-state="waiting"] .gps-dot { animation: pulse 1.2s infinite; }
+  @keyframes pulse { 50% { opacity: .3; } }
 
   /* Barra de ações */
   .actionbar { position: fixed; left: 0; right: 0; bottom: 0; z-index: 20; background: var(--card);
@@ -186,8 +203,16 @@
   <!-- FORMULÁRIO -->
   <section id="view-form">
     <div id="editBanner" class="banner warn" hidden>
-      <div class="grow">Editando registro <b id="editLabel"></b>. Ao salvar, ele será atualizado.</div>
+      <div class="grow">Editando registro <b id="editLabel"></b>. Ao salvar, ele será atualizado (data/hora e coordenada originais são mantidas).</div>
       <button class="btn sm" id="btnCancelEdit" type="button">Cancelar</button>
+    </div>
+    <div class="gps" id="gps" data-state="waiting">
+      <span class="gps-dot" aria-hidden="true"></span>
+      <div class="grow">
+        <div class="gps-title">Localização GPS</div>
+        <div class="gps-text" id="gpsText">Aguardando sinal…</div>
+      </div>
+      <button type="button" class="btn sm" id="btnGps">Atualizar</button>
     </div>
     <p class="intro">Perguntas com <span class="req">*</span> são obrigatórias. O preenchimento fica salvo automaticamente como rascunho, mesmo se o app for fechado.</p>
     <form id="form" novalidate autocomplete="off"></form>
@@ -245,10 +270,17 @@
      select    lista suspensa (other: opção que abre caixa de texto)
      choice    botões de escolha única (SIM/NAO etc.)
      pos       4 posições do poste; control = text | choice | select
-               (exige pelo menos 1 posição preenchida)
-   showIf: { pergunta: valor } libera a pergunta só nessa condição
+   posFrom: 'circuitos_posicao'  a pergunta só mostra as posições
+               que têm circuito informado na pergunta 3
+   showIf: { pergunta: valor } ou função (v) => true/false
+               libera a pergunta só nessa condição (condHint = aviso)
    ========================================================= */
-const FORM_VERSION = 1;
+const FORM_VERSION = 2;
+
+/* Regra das perguntas de posição (exceto a 3):
+   'todas'  -> toda posição liberada pela pergunta 3 precisa ser respondida
+   'uma'    -> basta responder pelo menos 1 das posições liberadas */
+const REGRA_POSICOES = 'todas';
 
 const POS = [
   { k: 'SE', n: 1, label: 'Superior Esquerda' },
@@ -259,28 +291,34 @@ const POS = [
 // Ordem das células no ícone 2x2 (como o poste é visto de frente)
 const POS_GRID = ['SE', 'SD', 'IE', 'ID'];
 
-const NUM_0_12 = Array.from({ length: 13 }, (_, i) => String(i));
+const nums = (a, b) => Array.from({ length: b - a + 1 }, (_, i) => String(a + i));
 const SIM_NAO = ['SIM', 'NAO'];
+const REG_IRREG = ['REGULAR', 'IRREGULAR'];
+const NAO_POSSUI = 'NÃO POSSUI';
+const P3 = 'circuitos_posicao'; // pergunta que libera as posições
 
 const QUESTIONS = [
   { id: 'waypoint', n: 1, title: 'Nome WayPoint GPS', type: 'text', numeric: true, required: true, placeholder: 'Somente números' },
   { id: 'especificacao_poste', n: 2, title: 'Especificação do Poste', type: 'text', required: true },
-  { id: 'circuitos_posicao', n: 3, title: 'Quais circuitos e qual posição?', type: 'pos', control: 'text' },
-  { id: 'equipamento', n: 4, title: 'Possui Equipamentos?', type: 'select', hint: 'Deixe sem seleção se o poste não tiver equipamento',
-    options: ['TRAFO', 'SF6', 'CHAVE FACA', 'CHAVE FUSIVEL', 'CHAVE RELIGADORA', 'BANCO CAPACITOR', 'OUTRO'], other: 'OUTRO' },
-  { id: 'estrutura_circuitos', n: 5, title: 'Estrutura e respectivos circuitos', type: 'pos', control: 'text' },
-  { id: 'estado_montagem', n: 6, title: 'Estado da montagem', type: 'pos', control: 'text' },
-  { id: 'para_raios', n: 7, title: 'Existe Para-Raios?', type: 'choice', options: SIM_NAO, required: true },
-  { id: 'qtd_para_raios', n: 8, title: 'Quantos Para-Raios?', type: 'select', options: NUM_0_12, required: true },
-  { id: 'estado_para_raio', n: 9, title: 'Estado da Montagem do Para-Raio', type: 'choice', options: ['REGULAR', 'IRREGULAR'], required: true },
-  { id: 'aterramento_temp', n: 10, title: 'Existe Ponto de Aterramento Temporário?', type: 'pos', control: 'choice', options: SIM_NAO },
-  { id: 'estado_aterramento_temp', n: 11, title: 'Qual estado do Aterramento Temporário?', type: 'pos', control: 'choice', options: ['REGULAR', 'IRREGULAR', 'NA'] },
+  { id: P3, n: 3, title: 'Quais circuitos e qual posição?', type: 'pos', control: 'text',
+    hint: 'Preencha pelo menos 1 posição. Só as posições com circuito aparecem nas perguntas seguintes.' },
+  { id: 'equipamento', n: 4, title: 'Possui Equipamentos?', type: 'select', required: true,
+    options: ['TRAFO', 'SF6', 'CHAVE FACA', 'CHAVE FUSIVEL', 'CHAVE RELIGADORA', 'BANCO CAPACITOR', 'OUTRO', NAO_POSSUI], other: 'OUTRO' },
+  { id: 'tag_equipamento', n: '4.1', title: 'Qual a TAG do Equipamento?', type: 'text', required: true,
+    showIf: (v) => v.equipamento !== '' && v.equipamento !== NAO_POSSUI, condHint: `Liberada quando a pergunta 4 tiver um equipamento (diferente de ${NAO_POSSUI})` },
+  { id: 'estrutura_circuitos', n: 5, title: 'Estrutura e respectivos circuitos', type: 'pos', control: 'text', posFrom: P3 },
+  { id: 'estado_montagem', n: 6, title: 'Estado da montagem', type: 'pos', control: 'choice', options: REG_IRREG, posFrom: P3 },
+  { id: 'para_raios', n: 7, title: 'Existe Para-Raios?', type: 'pos', control: 'choice', options: SIM_NAO, posFrom: P3 },
+  { id: 'qtd_para_raios', n: 8, title: 'Quantos Para-Raios?', type: 'pos', control: 'select', options: nums(0, 6), posFrom: P3 },
+  { id: 'estado_para_raio', n: 9, title: 'Estado da Montagem do Para-Raio', type: 'pos', control: 'choice', options: REG_IRREG, posFrom: P3 },
+  { id: 'aterramento_temp', n: 10, title: 'Existe Ponto de Aterramento Temporário?', type: 'pos', control: 'choice', options: SIM_NAO, posFrom: P3 },
+  { id: 'estado_aterramento_temp', n: 11, title: 'Qual estado do Aterramento Temporário?', type: 'pos', control: 'choice', options: ['REGULAR', 'IRREGULAR', 'NA'], posFrom: P3 },
   { id: 'emenda', n: 12, title: 'Existe Emenda?', type: 'choice', options: SIM_NAO, required: true },
   { id: 'local_emenda', n: 13, title: 'A emenda é no poste ou no vão anterior?', type: 'choice', options: ['POSTE', 'VÃO ANTERIOR'], required: true, showIf: { emenda: 'SIM' } },
   { id: 'tipo_emenda', n: 14, title: 'Tipo de Emenda', type: 'select', options: ['LUVA', 'CUNHA', 'CAPA', 'PERFURANTE', 'OUTRO'], other: 'OUTRO', required: true, showIf: { emenda: 'SIM' } },
-  { id: 'circuito_emenda', n: 15, title: 'Circuito da Emenda', type: 'pos', control: 'choice', options: ['SIM', 'NAO', 'NA'] },
-  { id: 'qtd_espacadores', n: 16, title: 'Quantos Espaçadores no vão anterior?', type: 'pos', control: 'select', options: [...NUM_0_12, 'NA'] },
-  { id: 'tipo_espacador', n: 17, title: 'Tipo do Espaçador', type: 'pos', control: 'text' },
+  { id: 'circuito_emenda', n: 15, title: 'Circuito da Emenda', type: 'pos', control: 'choice', options: ['SIM', 'NAO', 'NA'], posFrom: P3, showIf: { emenda: 'SIM' } },
+  { id: 'qtd_espacadores', n: 16, title: 'Quantos Espaçadores no vão anterior?', type: 'pos', control: 'select', options: [...nums(0, 12), 'NA'], posFrom: P3 },
+  { id: 'tipo_espacador', n: 17, title: 'Tipo do Espaçador', type: 'pos', control: 'choice', options: ['PLP', 'ANCORA'], posFrom: P3 },
   { id: 'baixa_tensao', n: 18, title: 'Existe Baixa Tensão?', type: 'choice', options: SIM_NAO, required: true },
   { id: 'iluminacao_viaria', n: 19, title: 'Existe Iluminação Viária?', type: 'choice', options: SIM_NAO, required: true },
   { id: 'fibra_optica', n: 20, title: 'Existe Fibra Óptica?', type: 'choice', options: SIM_NAO, required: true },
@@ -349,8 +387,9 @@ function mergeValues(src) {
   const v = emptyValues();
   for (const k of Object.keys(v)) {
     if (src == null || src[k] == null) continue;
-    if (typeof v[k] === 'object') { for (const p of POS) if (src[k][p.k] != null) v[k][p.k] = String(src[k][p.k]); }
-    else v[k] = String(src[k]);
+    if (typeof v[k] === 'object') {
+      if (typeof src[k] === 'object') for (const p of POS) if (src[k][p.k] != null) v[k][p.k] = String(src[k][p.k]);
+    } else if (typeof src[k] !== 'object') v[k] = String(src[k]);
   }
   return v;
 }
@@ -358,7 +397,12 @@ const qById = Object.fromEntries(QUESTIONS.map((q) => [q.id, q]));
 const baseId = (field) => field.replace(/_outro$/, '');
 const getVal = (field, pos) => pos ? values[field][pos] : values[field];
 function setVal(field, pos, v) { if (pos) values[field][pos] = v; else values[field] = v; }
-const isEnabled = (q) => !q.showIf || Object.entries(q.showIf).every(([k, v]) => values[k] === v);
+const isEnabled = (q) => !q.showIf || (typeof q.showIf === 'function'
+  ? q.showIf(values)
+  : Object.entries(q.showIf).every(([k, v]) => values[k] === v));
+// A posição está liberada? (depende do que foi preenchido na pergunta 3)
+const posOn = (q, k) => !q.posFrom || String(values[q.posFrom][k]).trim() !== '';
+const activePos = (q) => POS.filter((p) => posOn(q, p.k));
 const cardOf = (id) => form.querySelector(`.q[data-q="${id}"]`);
 
 function hasContent() {
@@ -394,22 +438,28 @@ function renderForm() {
     let body = '';
     let hint = q.hint || '';
     if (q.type === 'pos') {
-      hint = 'Preencha pelo menos 1 das 4 posições';
+      if (!hint) hint = q.posFrom
+        ? (REGRA_POSICOES === 'todas' ? 'Responda cada posição com circuito na pergunta 3' : 'Responda pelo menos 1 posição')
+        : 'Preencha pelo menos 1 das 4 posições';
       body = POS.map((p) => {
         const ico = `<span class="pos-ico" aria-hidden="true">${POS_GRID.map((k) => `<i class="${k === p.k ? 'on' : ''}"></i>`).join('')}</span>`;
         return `<div class="pos-row" data-pos-row="${p.k}">
-          <div class="pos-label">${ico}${p.n} · ${p.label}</div>
+          <div class="pos-label">${ico}${p.n} · ${p.label}<span class="pos-circ"></span></div>
           ${controlHTML(q, q.id, p.k, q.control, q.options, `${q.title} - ${p.label}`)}
         </div>`;
       }).join('');
+      if (q.posFrom) body += `<div class="pos-none">Preencha a pergunta ${qById[q.posFrom].n} para liberar as posições.</div>`;
     } else {
       body = controlHTML(q, q.id, null, q.type, q.options, q.title);
       if (q.other) body += `<input class="inp other" type="text" data-field="${q.id}_outro" placeholder="Descreva o outro…" aria-label="${esc(q.title)} - outro" autocapitalize="characters" hidden>`;
     }
-    if (q.showIf) hint = `Liberada apenas se a pergunta ${qById[Object.keys(q.showIf)[0]].n} for ${Object.values(q.showIf)[0]}`;
+    if (q.showIf) {
+      const cond = q.condHint || `Liberada apenas se a pergunta ${qById[Object.keys(q.showIf)[0]].n} for ${Object.values(q.showIf)[0]}`;
+      hint = hint && q.type === 'pos' ? `${cond}. ${hint}` : cond;
+    }
     const req = (q.required || q.type === 'pos') ? ' <span class="req">*</span>' : '';
     return `<div class="q" data-q="${q.id}">
-      <div class="q-head"><span class="q-num">${q.n}</span>
+      <div class="q-head"><span class="q-num${String(q.n).length > 2 ? ' small' : ''}">${q.n}</span>
         <div class="q-title">${esc(q.title)}${req}${hint ? `<span class="q-hint">${esc(hint)}</span>` : ''}</div>
       </div>
       ${body}
@@ -437,7 +487,7 @@ function syncUI() {
       card.classList.toggle('disabled', !on);
       $$('input,select,textarea,button', card).forEach((el) => { el.disabled = !on; });
       if (!on) {
-        values[q.id] = '';
+        values[q.id] = q.type === 'pos' ? Object.fromEntries(POS.map((p) => [p.k, ''])) : '';
         if (q.other) values[q.id + '_outro'] = '';
         $$('input,select,textarea', card).forEach((el) => { el.value = ''; });
         setErr(q.id, '');
@@ -451,7 +501,21 @@ function syncUI() {
     }
     if (q.type === 'pos') {
       const card = cardOf(q.id);
-      for (const p of POS) card.querySelector(`[data-pos-row="${p.k}"]`).classList.toggle('filled', String(values[q.id][p.k]).trim() !== '');
+      const qOn = isEnabled(q);
+      let shown = 0;
+      for (const p of POS) {
+        const row = card.querySelector(`[data-pos-row="${p.k}"]`);
+        const on = posOn(q, p.k);
+        // posição sem circuito na pergunta 3: some da tela (o valor fica guardado,
+        // mas não é exportado nem validado enquanto a posição estiver desligada)
+        row.hidden = !on;
+        if (on) shown++;
+        $$('input,select,button', row).forEach((el) => { el.disabled = !on || !qOn; });
+        row.classList.toggle('filled', on && String(values[q.id][p.k]).trim() !== '');
+        if (q.posFrom) row.querySelector('.pos-circ').textContent = on ? ` — ${String(values[q.posFrom][p.k]).trim()}` : '';
+      }
+      const none = card.querySelector('.pos-none');
+      if (none) none.hidden = shown > 0;
     }
   }
   $$('.chip', form).forEach((b) => {
@@ -503,7 +567,17 @@ function validateOne(q) {
   if (isEnabled(q)) {
     const v = values[q.id];
     if (q.type === 'pos') {
-      if (!POS.some((p) => String(v[p.k]).trim() !== '')) msg = 'Preencha pelo menos 1 das 4 posições.';
+      const act = activePos(q);
+      const vazias = act.filter((p) => String(v[p.k]).trim() === '');
+      if (!q.posFrom) {
+        if (!POS.some((p) => String(v[p.k]).trim() !== '')) msg = 'Preencha pelo menos 1 das 4 posições.';
+      } else if (act.length === 0) {
+        msg = ''; // a pergunta 3 é que vai acusar a falta
+      } else if (REGRA_POSICOES === 'todas' && vazias.length) {
+        msg = vazias.length === 1 ? `Responda a posição ${vazias[0].n} (${vazias[0].label}).` : `Responda as posições ${vazias.map((p) => p.n).join(', ')}.`;
+      } else if (REGRA_POSICOES !== 'todas' && vazias.length === act.length) {
+        msg = 'Responda pelo menos 1 posição.';
+      }
     } else if (q.required && String(v).trim() === '') {
       msg = (q.type === 'choice' || q.type === 'select') ? 'Selecione uma opção.' : 'Campo obrigatório.';
     }
@@ -524,8 +598,11 @@ function snapshot() {
   const r = {};
   for (const q of QUESTIONS) {
     const v = values[q.id];
-    r[q.id] = q.type === 'pos' ? Object.fromEntries(POS.map((p) => [p.k, String(v[p.k]).trim()])) : String(v).trim();
-    if (q.other) r[q.id + '_outro'] = values[q.id + '_outro'].trim();
+    const on = isEnabled(q);
+    r[q.id] = q.type === 'pos'
+      ? Object.fromEntries(POS.map((p) => [p.k, on && posOn(q, p.k) ? String(v[p.k]).trim() : '']))
+      : (on ? String(v).trim() : '');
+    if (q.other) r[q.id + '_outro'] = on && v === q.other ? values[q.id + '_outro'].trim() : '';
   }
   return r;
 }
@@ -544,10 +621,19 @@ $('#btnSave').addEventListener('click', () => {
 
   const now = localISO();
   if (editingId) {
+    // Na edição, a coordenada e a data/hora originais do poste são mantidas
     const r = recs.find((x) => x.id === editingId);
     if (r) { r.respostas = snapshot(); r.atualizado_em = now; r.exportado = false; r.versao_form = FORM_VERSION; }
   } else {
-    recs.unshift({ id: uuid(), equipe: team(), criado_em: now, atualizado_em: now, exportado: false, versao_form: FORM_VERSION, respostas: snapshot() });
+    const fix = freshFix();
+    if (!fix && !confirm('O GPS ainda não tem a localização do celular.\n\nSalvar este registro SEM coordenada?\n(Cancele para aguardar o sinal.)')) return;
+    recs.unshift({
+      id: uuid(), equipe: team(), criado_em: now, atualizado_em: now, exportado: false, versao_form: FORM_VERSION,
+      latitude: fix ? +fix.lat.toFixed(7) : null,
+      longitude: fix ? +fix.lon.toFixed(7) : null,
+      precisao_gps_m: fix ? Math.round(fix.acc) : null,
+      respostas: snapshot()
+    });
   }
   if (!saveRecords(recs)) return;
   const wasEdit = !!editingId;
@@ -609,6 +695,7 @@ function renderList() {
         <div class="rec-title">WP ${esc(r.respostas.waypoint)}</div>
         <div class="rec-sub">${esc(r.respostas.especificacao_poste)}</div>
         <div class="rec-meta">${esc(fmtDate(r.criado_em))}${r.equipe ? ' · ' + esc(r.equipe) : ''}${r.atualizado_em !== r.criado_em ? ' · editado' : ''}</div>
+        <div class="rec-meta">${r.latitude != null ? `📍 ${fmtCoord(r.latitude)}, ${fmtCoord(r.longitude)} (±${r.precisao_gps_m} m)` : '⚠️ Sem coordenada GPS'}</div>
       </div>
       <span class="tag ${r.exportado ? 'ok' : 'pend'}">${r.exportado ? 'Exportado' : 'Pendente'}</span>
       <div class="rec-actions">
@@ -641,18 +728,36 @@ $('#scope').addEventListener('click', (e) => {
   $$('#scope .chip').forEach((c) => c.setAttribute('aria-pressed', String(c === b)));
 });
 
-const META_COLS = ['id', 'equipe', 'criado_em', 'atualizado_em', 'versao_form'];
+// Colunas iniciais (identificação do poste) e finais (controle)
+const HEAD_COLS = ['data_hora', 'equipe', 'latitude', 'longitude', 'coordenada', 'precisao_gps_m'];
+const TAIL_COLS = ['id', 'criado_em', 'atualizado_em', 'versao_form'];
 function columns() {
-  const cols = [...META_COLS];
+  const cols = [...HEAD_COLS];
   for (const q of QUESTIONS) {
     if (q.type === 'pos') POS.forEach((p) => cols.push(`${q.id}_${p.k}`));
     else { cols.push(q.id); if (q.other) cols.push(q.id + '_outro'); }
   }
-  return cols;
+  return cols.concat(TAIL_COLS);
 }
+// Data/hora no formato que o Excel em português reconhece: 22/10/2026 14:35:07
+function excelDate(iso) {
+  const d = new Date(iso); if (isNaN(d)) return iso || '';
+  const p = (n) => String(n).padStart(2, '0');
+  return `${p(d.getDate())}/${p(d.getMonth() + 1)}/${d.getFullYear()} ${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}`;
+}
+// Excel em português usa vírgula como separador decimal
+const brNum = (n) => (n == null || n === '') ? '' : String(n).replace('.', ',');
 function flatten(r) {
-  const o = {};
-  META_COLS.forEach((c) => { o[c] = r[c] ?? ''; });
+  const has = r.latitude != null && r.longitude != null;
+  const o = {
+    data_hora: excelDate(r.criado_em),
+    equipe: r.equipe || '',
+    latitude: has ? brNum(r.latitude) : '',
+    longitude: has ? brNum(r.longitude) : '',
+    coordenada: has ? `${r.latitude}, ${r.longitude}` : '', // texto pronto para colar no Google Maps
+    precisao_gps_m: r.precisao_gps_m ?? ''
+  };
+  TAIL_COLS.forEach((c) => { o[c] = r[c] ?? ''; });
   for (const [k, v] of Object.entries(r.respostas || {})) {
     if (v && typeof v === 'object') for (const [pk, pv] of Object.entries(v)) o[`${k}_${pk}`] = pv;
     else o[k] = v;
@@ -724,7 +829,7 @@ function showView(v) {
   $('#formActions').hidden = v !== 'form';
   document.body.classList.toggle('on-records', v === 'records');
   $$('.tab').forEach((t) => t.classList.toggle('active', t.dataset.view === v));
-  if (v === 'records') renderList();
+  if (v === 'records') { renderList(); stopGps(); } else startGps();
   window.scrollTo({ top: 0 });
 }
 $$('.tab').forEach((t) => t.addEventListener('click', () => showView(t.dataset.view)));
@@ -732,6 +837,68 @@ $$('.tab').forEach((t) => t.addEventListener('click', () => showView(t.dataset.v
 const teamInput = $('#equipe');
 teamInput.value = team();
 teamInput.addEventListener('input', () => store.set(KEY.team, teamInput.value.trim()));
+
+/* ========================= GPS ========================= */
+// O GPS do celular funciona sem internet (usa satélites). Sem internet,
+// a primeira leitura pode demorar mais (1 a 2 min em céu aberto).
+const GPS_MAX_AGE_MS = 2 * 60 * 1000; // leitura mais velha que isso não é usada
+const geo = { fix: null, watchId: null, state: 'waiting', msg: '' };
+const fmtCoord = (n) => Number(n).toFixed(6);
+
+function freshFix() {
+  return geo.fix && (Date.now() - geo.fix.at) <= GPS_MAX_AGE_MS ? geo.fix : null;
+}
+function renderGps() {
+  const el = $('#gps'), txt = $('#gpsText');
+  const fix = freshFix();
+  if (fix) {
+    const s = Math.round((Date.now() - fix.at) / 1000);
+    el.dataset.state = 'ok';
+    txt.textContent = `${fmtCoord(fix.lat)}, ${fmtCoord(fix.lon)} · precisão ±${Math.round(fix.acc)} m · ${s < 5 ? 'agora' : `há ${s} s`}`;
+  } else if (geo.state === 'error') {
+    el.dataset.state = 'error';
+    txt.textContent = geo.msg;
+  } else {
+    el.dataset.state = 'waiting';
+    txt.textContent = geo.fix ? 'Leitura antiga descartada. Aguardando nova leitura…' : 'Aguardando sinal… (em área aberta é mais rápido)';
+  }
+}
+function startGps() {
+  if (!('geolocation' in navigator)) {
+    geo.state = 'error'; geo.msg = 'Este aparelho/navegador não oferece localização.'; renderGps(); return;
+  }
+  if (geo.watchId != null) return;
+  if (geo.state !== 'error') geo.state = 'waiting';
+  geo.watchId = navigator.geolocation.watchPosition(
+    (pos) => {
+      geo.fix = { lat: pos.coords.latitude, lon: pos.coords.longitude, acc: pos.coords.accuracy, at: Date.now() };
+      geo.state = 'ok'; renderGps();
+    },
+    (err) => {
+      if (err.code === 1) {
+        geo.state = 'error';
+        geo.msg = isIOS
+          ? 'Localização bloqueada. Ajustes › Privacidade › Serviços de Localização › Sites do Safari › "Ao Usar o App".'
+          : 'Localização bloqueada. Toque no cadeado/ícone ao lado do endereço (ou Configurações do site) e permita a localização.';
+        stopGps();
+      } else if (err.code === 2) {
+        geo.state = 'error'; geo.msg = 'GPS desligado ou sem sinal. Ative a localização do celular.';
+      } // code 3 (demorou): continua aguardando
+      renderGps();
+    },
+    { enableHighAccuracy: true, maximumAge: 15000, timeout: 60000 }
+  );
+  renderGps();
+}
+function stopGps() {
+  if (geo.watchId != null) { navigator.geolocation.clearWatch(geo.watchId); geo.watchId = null; }
+}
+$('#btnGps').addEventListener('click', () => { stopGps(); geo.state = 'waiting'; startGps(); });
+setInterval(() => { if (!$('#view-form').hidden) renderGps(); }, 5000);
+// Economiza bateria: o GPS fica ligado só com o formulário na tela
+document.addEventListener('visibilitychange', () => {
+  if (document.hidden) stopGps(); else if (!$('#view-form').hidden) startGps();
+});
 
 /* ========================= Online / instalação ========================= */
 function updateNet() {
@@ -790,6 +957,7 @@ if (draft && draft.values) {
 fillForm();
 updateCounts();
 updateNet();
+startGps();
 </script>
 </body>
 </html>

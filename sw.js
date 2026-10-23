@@ -2,7 +2,7 @@
    IMPORTANTE: sempre que alterar index.html (ou outro arquivo do app),
    aumente o número da versão abaixo. É isso que faz os celulares
    baixarem a nova versão na próxima vez que tiverem internet. */
-const CACHE = 'inspecao-postes-v1';
+const CACHE = 'inspecao-postes-v2';
 
 const ASSETS = [
   './',
