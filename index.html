@@ -1,0 +1,795 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Inspeção de Postes</title>
+<meta name="description" content="Formulário de inspeção de postes que funciona sem internet.">
+<meta name="theme-color" content="#0e4a6e">
+<link rel="manifest" href="manifest.json">
+<link rel="icon" type="image/png" href="icons/icon-192.png">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Inspeção">
+<style>
+  :root {
+    --bg: #eef2f5; --card: #ffffff; --ink: #14212b; --muted: #5b6b78; --line: #cfd8e0;
+    --head: #0e4a6e; --head-ink: #ffffff;
+    --pri: #0e4a6e; --pri-ink: #ffffff; --pri-soft: #e1edf5;
+    --acc: #f0a020;
+    --ok: #1e7a46; --ok-soft: #e3f3ea;
+    --err: #c0392b; --err-soft: #fbe9e7;
+    --warn-soft: #fff4dc;
+    --input: #f7f9fb;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #0d1419; --card: #16212a; --ink: #e7eef3; --muted: #9db0bf; --line: #2c3c49;
+      --head: #0b2433; --head-ink: #ffffff;
+      --pri: #4aa6e0; --pri-ink: #04121c; --pri-soft: #173246;
+      --ok: #4cc386; --ok-soft: #17352a;
+      --err: #ff7b6b; --err-soft: #3a1f1c;
+      --warn-soft: #3a3018;
+      --input: #0f1920;
+    }
+  }
+  * { box-sizing: border-box; }
+  html { -webkit-text-size-adjust: 100%; }
+  body {
+    margin: 0; background: var(--bg); color: var(--ink);
+    font: 16px/1.4 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, system-ui, sans-serif;
+    padding-bottom: calc(88px + env(safe-area-inset-bottom));
+  }
+  button, input, select, textarea { font: inherit; color: inherit; }
+  [hidden] { display: none !important; }
+
+  /* Cabeçalho */
+  .topbar {
+    position: sticky; top: 0; z-index: 20;
+    background: var(--head); color: var(--head-ink);
+    padding-top: env(safe-area-inset-top);
+    box-shadow: 0 2px 8px rgba(0,0,0,.15);
+  }
+  .brand { display: flex; align-items: center; justify-content: space-between; gap: 8px;
+    max-width: 720px; margin: 0 auto; padding: 12px 16px 6px; }
+  .brand-title { font-size: 18px; font-weight: 700; letter-spacing: .2px; }
+  .net { font-size: 12px; font-weight: 600; padding: 3px 10px; border-radius: 999px;
+    background: rgba(255,255,255,.15); white-space: nowrap; }
+  .net.off { background: var(--acc); color: #1d1300; }
+  .tabs { display: flex; max-width: 720px; margin: 0 auto; }
+  .tab { flex: 1; background: none; border: 0; color: rgba(255,255,255,.75);
+    padding: 10px 8px 12px; font-weight: 600; border-bottom: 3px solid transparent; cursor: pointer; }
+  .tab.active { color: #fff; border-bottom-color: var(--acc); }
+  .badge { display: inline-block; min-width: 22px; padding: 1px 7px; margin-left: 4px;
+    border-radius: 999px; background: rgba(255,255,255,.2); font-size: 13px; }
+
+  main { max-width: 720px; margin: 0 auto; padding: 4px 12px 12px; }
+
+  .banner { margin: 10px 0; padding: 12px 14px; border-radius: 12px; background: var(--pri-soft);
+    display: flex; gap: 10px; align-items: flex-start; font-size: 15px; }
+  .banner.warn { background: var(--warn-soft); }
+  .banner .grow { flex: 1; }
+  .banner .x { background: none; border: 0; font-size: 22px; line-height: 1; padding: 0 4px; cursor: pointer; color: var(--muted); }
+
+  .intro { color: var(--muted); font-size: 14px; margin: 12px 4px 4px; }
+  .req { color: var(--err); font-weight: 700; }
+
+  /* Perguntas */
+  .q { background: var(--card); border: 1.5px solid var(--line); border-radius: 14px;
+    padding: 14px; margin: 10px 0; transition: border-color .15s, opacity .15s; scroll-margin-top: 120px; }
+  .q.invalid { border-color: var(--err); box-shadow: 0 0 0 3px var(--err-soft); }
+  .q.disabled { opacity: .5; }
+  .q-head { display: flex; gap: 10px; align-items: flex-start; margin-bottom: 10px; }
+  .q-num { flex: none; width: 28px; height: 28px; border-radius: 50%; display: grid; place-items: center;
+    background: var(--pri-soft); color: var(--pri); font-weight: 700; font-size: 14px; }
+  .q-title { font-weight: 650; font-size: 16px; padding-top: 3px; }
+  .q-hint { display: block; color: var(--muted); font-size: 13px; font-weight: 400; margin-top: 2px; }
+  .q-err { color: var(--err); font-size: 14px; font-weight: 600; margin-top: 8px; }
+  .q-err:empty { display: none; }
+
+  .inp { width: 100%; min-height: 48px; padding: 10px 12px; border: 1.5px solid var(--line);
+    border-radius: 10px; background: var(--input); font-size: 16px; }
+  textarea.inp { min-height: 110px; resize: vertical; }
+  .inp:focus { outline: none; border-color: var(--pri); box-shadow: 0 0 0 3px var(--pri-soft); }
+  .inp:disabled { cursor: not-allowed; }
+  select.inp { appearance: none; -webkit-appearance: none; padding-right: 40px;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='14' height='9' viewBox='0 0 14 9'%3E%3Cpath d='M1 1l6 6 6-6' fill='none' stroke='%237b8a96' stroke-width='2'/%3E%3C/svg%3E");
+    background-repeat: no-repeat; background-position: right 14px center; }
+  .other { margin-top: 8px; }
+
+  .chips { display: flex; flex-wrap: wrap; gap: 8px; }
+  .chip { flex: 1 1 0; min-width: 72px; min-height: 46px; padding: 0 12px; border-radius: 10px;
+    border: 1.5px solid var(--line); background: var(--input); font-weight: 650; font-size: 15px; cursor: pointer;
+    transition: background .1s; }
+  .chip[aria-pressed="true"] { background: var(--pri); border-color: var(--pri); color: var(--pri-ink); }
+  .chip:disabled { cursor: not-allowed; }
+
+  /* 4 posições */
+  .pos-row { padding: 10px 0; border-top: 1px dashed var(--line); }
+  .pos-row:first-child { border-top: 0; padding-top: 2px; }
+  .pos-label { display: flex; align-items: center; gap: 8px; font-size: 14px; font-weight: 600;
+    color: var(--muted); margin-bottom: 6px; }
+  .pos-ico { display: inline-grid; grid-template-columns: 8px 8px; gap: 2px; }
+  .pos-ico i { width: 8px; height: 8px; border-radius: 2px; background: var(--line); }
+  .pos-ico i.on { background: var(--acc); }
+  .pos-row.filled .pos-label { color: var(--ink); }
+
+  /* Barra de ações */
+  .actionbar { position: fixed; left: 0; right: 0; bottom: 0; z-index: 20; background: var(--card);
+    border-top: 1px solid var(--line); padding: 10px 12px calc(10px + env(safe-area-inset-bottom)); }
+  .actionbar .inner { max-width: 720px; margin: 0 auto; display: flex; gap: 10px; }
+  .btn { min-height: 48px; padding: 0 16px; border-radius: 10px; border: 1.5px solid var(--line);
+    background: var(--card); font-weight: 650; cursor: pointer; }
+  .btn.primary { background: var(--pri); border-color: var(--pri); color: var(--pri-ink); }
+  .btn.danger { color: var(--err); border-color: var(--err-soft); background: transparent; }
+  .btn.sm { min-height: 40px; padding: 0 14px; font-size: 14px; }
+  .btn.block { width: 100%; }
+  #btnSave { flex: 2; }
+  #btnClear { flex: 1; }
+
+  /* Registros */
+  .card { background: var(--card); border: 1.5px solid var(--line); border-radius: 14px; padding: 14px; margin: 10px 0; }
+  .card h2 { font-size: 16px; margin: 0 0 8px; }
+  .card label { display: block; font-weight: 650; margin-bottom: 6px; }
+  .hint { color: var(--muted); font-size: 13px; margin: 6px 0 0; }
+  .row { display: flex; gap: 10px; margin-top: 10px; }
+  .row > * { flex: 1; }
+  .seg { display: flex; gap: 8px; margin: 8px 0 2px; }
+  .seg .chip { min-height: 40px; font-size: 14px; }
+  .rec { background: var(--card); border: 1.5px solid var(--line); border-radius: 14px; padding: 12px 14px; margin: 10px 0;
+    display: grid; grid-template-columns: 1fr auto; gap: 4px 10px; }
+  .rec-title { font-weight: 700; font-size: 17px; }
+  .rec-sub { color: var(--ink); font-size: 14px; overflow-wrap: anywhere; }
+  .rec-meta { color: var(--muted); font-size: 13px; }
+  .tag { align-self: start; font-size: 12px; font-weight: 700; padding: 3px 9px; border-radius: 999px; white-space: nowrap; }
+  .tag.ok { background: var(--ok-soft); color: var(--ok); }
+  .tag.pend { background: var(--warn-soft); color: #9a5b00; }
+  @media (prefers-color-scheme: dark) { .tag.pend { color: var(--acc); } }
+  .rec-actions { grid-column: 1 / -1; display: flex; gap: 8px; margin-top: 6px; }
+  .empty { text-align: center; color: var(--muted); padding: 24px 0; }
+  .section-title { font-size: 14px; color: var(--muted); font-weight: 700; text-transform: uppercase;
+    letter-spacing: .5px; margin: 18px 4px 4px; }
+
+  .toast { position: fixed; left: 50%; bottom: calc(84px + env(safe-area-inset-bottom)); transform: translate(-50%, 20px);
+    max-width: calc(100% - 32px); width: max-content; background: #14212b; color: #fff; padding: 12px 16px;
+    border-radius: 12px; font-weight: 600; opacity: 0; pointer-events: none; transition: all .2s; z-index: 30;
+    display: flex; gap: 12px; align-items: center; box-shadow: 0 6px 20px rgba(0,0,0,.25); }
+  .toast.show { opacity: 1; transform: translate(-50%, 0); pointer-events: auto; }
+  .toast.err { background: var(--err); }
+  .toast.ok { background: #1e7a46; }
+  .toast button { background: rgba(255,255,255,.2); border: 0; color: #fff; padding: 6px 10px; border-radius: 8px; font-weight: 700; }
+  body.on-records .toast { bottom: calc(20px + env(safe-area-inset-bottom)); }
+  body.on-records { padding-bottom: 24px; }
+</style>
+</head>
+<body>
+
+<header class="topbar">
+  <div class="brand">
+    <span class="brand-title">Inspeção de Postes</span>
+    <span id="netStatus" class="net">Online</span>
+  </div>
+  <nav class="tabs">
+    <button class="tab active" data-view="form" type="button">Formulário</button>
+    <button class="tab" data-view="records" type="button">Registros <span id="countBadge" class="badge">0</span></button>
+  </nav>
+</header>
+
+<main>
+  <div id="installBanner" class="banner" hidden>
+    <div class="grow" id="installText"></div>
+    <button class="x" id="installClose" type="button" aria-label="Fechar">×</button>
+  </div>
+
+  <!-- FORMULÁRIO -->
+  <section id="view-form">
+    <div id="editBanner" class="banner warn" hidden>
+      <div class="grow">Editando registro <b id="editLabel"></b>. Ao salvar, ele será atualizado.</div>
+      <button class="btn sm" id="btnCancelEdit" type="button">Cancelar</button>
+    </div>
+    <p class="intro">Perguntas com <span class="req">*</span> são obrigatórias. O preenchimento fica salvo automaticamente como rascunho, mesmo se o app for fechado.</p>
+    <form id="form" novalidate autocomplete="off"></form>
+  </section>
+
+  <!-- REGISTROS -->
+  <section id="view-records" hidden>
+    <div class="card">
+      <label for="equipe">Equipe / responsável</label>
+      <input id="equipe" class="inp" type="text" placeholder="Ex.: Equipe 03 - João">
+      <p class="hint">Vai junto em cada registro novo, para identificar quem coletou.</p>
+    </div>
+
+    <div class="card">
+      <h2>Exportar respostas</h2>
+      <p class="hint" id="exportSummary"></p>
+      <div class="seg" id="scope">
+        <button type="button" class="chip" data-scope="pend" aria-pressed="true">Só pendentes</button>
+        <button type="button" class="chip" data-scope="all" aria-pressed="false">Todos</button>
+      </div>
+      <div class="row">
+        <button type="button" class="btn primary" id="btnCsv">Exportar CSV</button>
+        <button type="button" class="btn" id="btnJson">Exportar JSON</button>
+      </div>
+      <p class="hint">O arquivo abre as opções do celular (WhatsApp, e-mail, Drive, Salvar em Arquivos). Exporte com frequência: até lá, os dados existem só neste aparelho.</p>
+      <div class="row">
+        <button type="button" class="btn danger" id="btnPurge">Apagar registros já exportados</button>
+      </div>
+    </div>
+
+    <div class="section-title">Registros salvos</div>
+    <div id="list"></div>
+  </section>
+</main>
+
+<div class="actionbar" id="formActions">
+  <div class="inner">
+    <button type="button" id="btnClear" class="btn">Limpar</button>
+    <button type="button" id="btnSave" class="btn primary">Salvar registro</button>
+  </div>
+</div>
+
+<div id="toast" class="toast" role="status" aria-live="polite"></div>
+
+<script>
+'use strict';
+
+/* =========================================================
+   DEFINIÇÃO DO FORMULÁRIO
+   Para mudar perguntas, edite esta lista e aumente a versão
+   do cache em sw.js.
+   Tipos:
+     text      caixa de texto (numeric: só números)
+     textarea  texto livre longo
+     select    lista suspensa (other: opção que abre caixa de texto)
+     choice    botões de escolha única (SIM/NAO etc.)
+     pos       4 posições do poste; control = text | choice | select
+               (exige pelo menos 1 posição preenchida)
+   showIf: { pergunta: valor } libera a pergunta só nessa condição
+   ========================================================= */
+const FORM_VERSION = 1;
+
+const POS = [
+  { k: 'SE', n: 1, label: 'Superior Esquerda' },
+  { k: 'SD', n: 2, label: 'Superior Direita' },
+  { k: 'ID', n: 3, label: 'Inferior Direita' },
+  { k: 'IE', n: 4, label: 'Inferior Esquerda' }
+];
+// Ordem das células no ícone 2x2 (como o poste é visto de frente)
+const POS_GRID = ['SE', 'SD', 'IE', 'ID'];
+
+const NUM_0_12 = Array.from({ length: 13 }, (_, i) => String(i));
+const SIM_NAO = ['SIM', 'NAO'];
+
+const QUESTIONS = [
+  { id: 'waypoint', n: 1, title: 'Nome WayPoint GPS', type: 'text', numeric: true, required: true, placeholder: 'Somente números' },
+  { id: 'especificacao_poste', n: 2, title: 'Especificação do Poste', type: 'text', required: true },
+  { id: 'circuitos_posicao', n: 3, title: 'Quais circuitos e qual posição?', type: 'pos', control: 'text' },
+  { id: 'equipamento', n: 4, title: 'Possui Equipamentos?', type: 'select', hint: 'Deixe sem seleção se o poste não tiver equipamento',
+    options: ['TRAFO', 'SF6', 'CHAVE FACA', 'CHAVE FUSIVEL', 'CHAVE RELIGADORA', 'BANCO CAPACITOR', 'OUTRO'], other: 'OUTRO' },
+  { id: 'estrutura_circuitos', n: 5, title: 'Estrutura e respectivos circuitos', type: 'pos', control: 'text' },
+  { id: 'estado_montagem', n: 6, title: 'Estado da montagem', type: 'pos', control: 'text' },
+  { id: 'para_raios', n: 7, title: 'Existe Para-Raios?', type: 'choice', options: SIM_NAO, required: true },
+  { id: 'qtd_para_raios', n: 8, title: 'Quantos Para-Raios?', type: 'select', options: NUM_0_12, required: true },
+  { id: 'estado_para_raio', n: 9, title: 'Estado da Montagem do Para-Raio', type: 'choice', options: ['REGULAR', 'IRREGULAR'], required: true },
+  { id: 'aterramento_temp', n: 10, title: 'Existe Ponto de Aterramento Temporário?', type: 'pos', control: 'choice', options: SIM_NAO },
+  { id: 'estado_aterramento_temp', n: 11, title: 'Qual estado do Aterramento Temporário?', type: 'pos', control: 'choice', options: ['REGULAR', 'IRREGULAR', 'NA'] },
+  { id: 'emenda', n: 12, title: 'Existe Emenda?', type: 'choice', options: SIM_NAO, required: true },
+  { id: 'local_emenda', n: 13, title: 'A emenda é no poste ou no vão anterior?', type: 'choice', options: ['POSTE', 'VÃO ANTERIOR'], required: true, showIf: { emenda: 'SIM' } },
+  { id: 'tipo_emenda', n: 14, title: 'Tipo de Emenda', type: 'select', options: ['LUVA', 'CUNHA', 'CAPA', 'PERFURANTE', 'OUTRO'], other: 'OUTRO', required: true, showIf: { emenda: 'SIM' } },
+  { id: 'circuito_emenda', n: 15, title: 'Circuito da Emenda', type: 'pos', control: 'choice', options: ['SIM', 'NAO', 'NA'] },
+  { id: 'qtd_espacadores', n: 16, title: 'Quantos Espaçadores no vão anterior?', type: 'pos', control: 'select', options: [...NUM_0_12, 'NA'] },
+  { id: 'tipo_espacador', n: 17, title: 'Tipo do Espaçador', type: 'pos', control: 'text' },
+  { id: 'baixa_tensao', n: 18, title: 'Existe Baixa Tensão?', type: 'choice', options: SIM_NAO, required: true },
+  { id: 'iluminacao_viaria', n: 19, title: 'Existe Iluminação Viária?', type: 'choice', options: SIM_NAO, required: true },
+  { id: 'fibra_optica', n: 20, title: 'Existe Fibra Óptica?', type: 'choice', options: SIM_NAO, required: true },
+  { id: 'pontos_atencao', n: 21, title: 'Pontos de Atenção', type: 'textarea', placeholder: 'Observações livres (opcional)' }
+];
+
+/* ========================= Utilidades ========================= */
+const $ = (s, el = document) => el.querySelector(s);
+const $$ = (s, el = document) => Array.from(el.querySelectorAll(s));
+const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+const KEY = { records: 'inspecoes.registros.v1', draft: 'inspecoes.rascunho.v1', team: 'inspecoes.equipe', iosHint: 'inspecoes.dicaIos' };
+
+const store = {
+  get(k, d) { try { const v = localStorage.getItem(k); return v == null ? d : JSON.parse(v); } catch (e) { return d; } },
+  set(k, v) {
+    try { localStorage.setItem(k, JSON.stringify(v)); return true; }
+    catch (e) { toast('Não foi possível salvar no aparelho (memória cheia?). Exporte e apague registros antigos.', 'err', null, 6000); return false; }
+  },
+  del(k) { try { localStorage.removeItem(k); } catch (e) { /* ignora */ } }
+};
+
+function uuid() {
+  if (window.crypto && crypto.randomUUID) return crypto.randomUUID();
+  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
+    const r = Math.random() * 16 | 0; return (c === 'x' ? r : (r & 3 | 8)).toString(16);
+  });
+}
+function localISO(d = new Date()) {
+  const p = (n) => String(n).padStart(2, '0');
+  const off = -d.getTimezoneOffset(), s = off >= 0 ? '+' : '-', a = Math.abs(off);
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}T${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}${s}${p(a / 60 | 0)}:${p(a % 60)}`;
+}
+function fmtDate(iso) {
+  const d = new Date(iso);
+  return isNaN(d) ? iso : d.toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+}
+function slug(s) {
+  return String(s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-zA-Z0-9]+/g, '-').replace(/^-|-$/g, '').toLowerCase().slice(0, 30);
+}
+
+let toastTimer;
+function toast(msg, type = '', action = null, ms = 3200) {
+  const t = $('#toast');
+  t.className = 'toast ' + type;
+  t.innerHTML = `<span>${esc(msg)}</span>` + (action ? `<button type="button">${esc(action.label)}</button>` : '');
+  if (action) t.querySelector('button').onclick = action.fn;
+  requestAnimationFrame(() => t.classList.add('show'));
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => t.classList.remove('show'), action ? 10000 : ms);
+}
+
+/* ========================= Estado ========================= */
+const form = $('#form');
+let values = emptyValues();
+let editingId = null;
+
+function emptyValues() {
+  const v = {};
+  for (const q of QUESTIONS) {
+    v[q.id] = q.type === 'pos' ? Object.fromEntries(POS.map((p) => [p.k, ''])) : '';
+    if (q.other) v[q.id + '_outro'] = '';
+  }
+  return v;
+}
+function mergeValues(src) {
+  const v = emptyValues();
+  for (const k of Object.keys(v)) {
+    if (src == null || src[k] == null) continue;
+    if (typeof v[k] === 'object') { for (const p of POS) if (src[k][p.k] != null) v[k][p.k] = String(src[k][p.k]); }
+    else v[k] = String(src[k]);
+  }
+  return v;
+}
+const qById = Object.fromEntries(QUESTIONS.map((q) => [q.id, q]));
+const baseId = (field) => field.replace(/_outro$/, '');
+const getVal = (field, pos) => pos ? values[field][pos] : values[field];
+function setVal(field, pos, v) { if (pos) values[field][pos] = v; else values[field] = v; }
+const isEnabled = (q) => !q.showIf || Object.entries(q.showIf).every(([k, v]) => values[k] === v);
+const cardOf = (id) => form.querySelector(`.q[data-q="${id}"]`);
+
+function hasContent() {
+  return Object.values(values).some((v) => typeof v === 'object' ? Object.values(v).some((x) => String(x).trim()) : String(v).trim());
+}
+
+/* ========================= Renderização ========================= */
+function controlHTML(q, field, pos, ctrl, options, label) {
+  const posAttr = pos ? ` data-pos="${pos}"` : '';
+  const aria = label ? ` aria-label="${esc(label)}"` : '';
+  if (ctrl === 'text') {
+    const num = q.numeric ? ' inputmode="numeric" pattern="[0-9]*" data-numeric="1"' : '';
+    const ph = q.placeholder && !pos ? ` placeholder="${esc(q.placeholder)}"` : '';
+    return `<input class="inp" type="text" data-field="${field}"${posAttr}${num}${ph}${aria} autocomplete="off" autocapitalize="characters">`;
+  }
+  if (ctrl === 'textarea') {
+    return `<textarea class="inp" data-field="${field}"${aria} placeholder="${esc(q.placeholder || '')}"></textarea>`;
+  }
+  if (ctrl === 'select') {
+    const opts = options.map((o) => `<option value="${esc(o)}">${esc(o)}</option>`).join('');
+    return `<select class="inp" data-field="${field}"${posAttr}${aria}><option value="">Selecione…</option>${opts}</select>`;
+  }
+  if (ctrl === 'choice') {
+    return `<div class="chips" role="group"${aria}>` + options.map((o) =>
+      `<button type="button" class="chip" data-field="${field}"${posAttr} data-value="${esc(o)}" aria-pressed="false">${esc(o)}</button>`
+    ).join('') + `</div>`;
+  }
+  return '';
+}
+
+function renderForm() {
+  form.innerHTML = QUESTIONS.map((q) => {
+    let body = '';
+    let hint = q.hint || '';
+    if (q.type === 'pos') {
+      hint = 'Preencha pelo menos 1 das 4 posições';
+      body = POS.map((p) => {
+        const ico = `<span class="pos-ico" aria-hidden="true">${POS_GRID.map((k) => `<i class="${k === p.k ? 'on' : ''}"></i>`).join('')}</span>`;
+        return `<div class="pos-row" data-pos-row="${p.k}">
+          <div class="pos-label">${ico}${p.n} · ${p.label}</div>
+          ${controlHTML(q, q.id, p.k, q.control, q.options, `${q.title} - ${p.label}`)}
+        </div>`;
+      }).join('');
+    } else {
+      body = controlHTML(q, q.id, null, q.type, q.options, q.title);
+      if (q.other) body += `<input class="inp other" type="text" data-field="${q.id}_outro" placeholder="Descreva o outro…" aria-label="${esc(q.title)} - outro" autocapitalize="characters" hidden>`;
+    }
+    if (q.showIf) hint = `Liberada apenas se a pergunta ${qById[Object.keys(q.showIf)[0]].n} for ${Object.values(q.showIf)[0]}`;
+    const req = (q.required || q.type === 'pos') ? ' <span class="req">*</span>' : '';
+    return `<div class="q" data-q="${q.id}">
+      <div class="q-head"><span class="q-num">${q.n}</span>
+        <div class="q-title">${esc(q.title)}${req}${hint ? `<span class="q-hint">${esc(hint)}</span>` : ''}</div>
+      </div>
+      ${body}
+      <div class="q-err"></div>
+    </div>`;
+  }).join('');
+}
+
+// Copia "values" para os campos da tela
+function fillForm() {
+  $$('[data-field]', form).forEach((el) => {
+    if (el.classList.contains('chip')) return;
+    el.value = getVal(el.dataset.field, el.dataset.pos) ?? '';
+  });
+  $$('.q', form).forEach((c) => setErr(c.dataset.q, ''));
+  syncUI();
+}
+
+// Atualiza condicionais, "OUTRO", botões marcados e posições preenchidas
+function syncUI() {
+  for (const q of QUESTIONS) {
+    if (q.showIf) {
+      const on = isEnabled(q);
+      const card = cardOf(q.id);
+      card.classList.toggle('disabled', !on);
+      $$('input,select,textarea,button', card).forEach((el) => { el.disabled = !on; });
+      if (!on) {
+        values[q.id] = '';
+        if (q.other) values[q.id + '_outro'] = '';
+        $$('input,select,textarea', card).forEach((el) => { el.value = ''; });
+        setErr(q.id, '');
+      }
+    }
+    if (q.other) {
+      const box = form.querySelector(`[data-field="${q.id}_outro"]`);
+      const show = values[q.id] === q.other;
+      box.hidden = !show;
+      if (!show && values[q.id + '_outro']) { values[q.id + '_outro'] = ''; box.value = ''; }
+    }
+    if (q.type === 'pos') {
+      const card = cardOf(q.id);
+      for (const p of POS) card.querySelector(`[data-pos-row="${p.k}"]`).classList.toggle('filled', String(values[q.id][p.k]).trim() !== '');
+    }
+  }
+  $$('.chip', form).forEach((b) => {
+    b.setAttribute('aria-pressed', String(getVal(b.dataset.field, b.dataset.pos) === b.dataset.value));
+  });
+}
+
+function setErr(id, msg) {
+  const c = cardOf(id); if (!c) return;
+  c.classList.toggle('invalid', !!msg);
+  c.querySelector('.q-err').textContent = msg;
+}
+
+/* ========================= Interação ========================= */
+function onFieldInput(e) {
+  const t = e.target, field = t.dataset.field;
+  if (!field) return;
+  if (t.dataset.numeric) {
+    const clean = t.value.replace(/\D+/g, '');
+    if (clean !== t.value) t.value = clean;
+  }
+  setVal(field, t.dataset.pos, t.value);
+  syncUI();
+  if (cardOf(baseId(field)).classList.contains('invalid')) validateOne(qById[baseId(field)]);
+  saveDraft();
+}
+form.addEventListener('input', onFieldInput);
+form.addEventListener('change', onFieldInput);
+
+form.addEventListener('click', (e) => {
+  const b = e.target.closest('.chip');
+  if (!b || b.disabled) return;
+  const { field, pos, value } = b.dataset;
+  setVal(field, pos, getVal(field, pos) === value ? '' : value); // tocar de novo desmarca
+  syncUI();
+  if (cardOf(field).classList.contains('invalid')) validateOne(qById[field]);
+  saveDraft();
+});
+
+let draftTimer;
+function saveDraft() {
+  clearTimeout(draftTimer);
+  draftTimer = setTimeout(() => store.set(KEY.draft, { values, editingId }), 250);
+}
+
+/* ========================= Validação ========================= */
+function validateOne(q) {
+  let msg = '';
+  if (isEnabled(q)) {
+    const v = values[q.id];
+    if (q.type === 'pos') {
+      if (!POS.some((p) => String(v[p.k]).trim() !== '')) msg = 'Preencha pelo menos 1 das 4 posições.';
+    } else if (q.required && String(v).trim() === '') {
+      msg = (q.type === 'choice' || q.type === 'select') ? 'Selecione uma opção.' : 'Campo obrigatório.';
+    }
+    if (!msg && q.numeric && v && !/^\d+$/.test(v)) msg = 'Use apenas números.';
+    if (!msg && q.other && v === q.other && !values[q.id + '_outro'].trim()) msg = 'Descreva qual é o "OUTRO".';
+  }
+  setErr(q.id, msg);
+  return !msg;
+}
+function validateAll() { return QUESTIONS.filter((q) => !validateOne(q)); }
+
+/* ========================= Registros ========================= */
+const loadRecords = () => store.get(KEY.records, []);
+const saveRecords = (r) => store.set(KEY.records, r);
+const team = () => store.get(KEY.team, '');
+
+function snapshot() {
+  const r = {};
+  for (const q of QUESTIONS) {
+    const v = values[q.id];
+    r[q.id] = q.type === 'pos' ? Object.fromEntries(POS.map((p) => [p.k, String(v[p.k]).trim()])) : String(v).trim();
+    if (q.other) r[q.id + '_outro'] = values[q.id + '_outro'].trim();
+  }
+  return r;
+}
+
+$('#btnSave').addEventListener('click', () => {
+  const bad = validateAll();
+  if (bad.length) {
+    cardOf(bad[0].id).scrollIntoView({ behavior: 'smooth', block: 'center' });
+    toast(bad.length === 1 ? `A pergunta ${bad[0].n} precisa de atenção.` : `${bad.length} perguntas precisam de atenção.`, 'err');
+    return;
+  }
+  const recs = loadRecords();
+  const wp = values.waypoint.trim();
+  const dup = recs.find((r) => r.respostas.waypoint === wp && r.id !== editingId);
+  if (dup && !confirm(`Já existe um registro com o WayPoint ${wp}. Salvar mesmo assim?`)) return;
+
+  const now = localISO();
+  if (editingId) {
+    const r = recs.find((x) => x.id === editingId);
+    if (r) { r.respostas = snapshot(); r.atualizado_em = now; r.exportado = false; r.versao_form = FORM_VERSION; }
+  } else {
+    recs.unshift({ id: uuid(), equipe: team(), criado_em: now, atualizado_em: now, exportado: false, versao_form: FORM_VERSION, respostas: snapshot() });
+  }
+  if (!saveRecords(recs)) return;
+  const wasEdit = !!editingId;
+  resetForm();
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+  toast(wasEdit ? 'Registro atualizado ✓' : `Registro WP ${wp} salvo no aparelho ✓`, 'ok');
+});
+
+function resetForm() {
+  editingId = null;
+  values = emptyValues();
+  fillForm();
+  store.del(KEY.draft);
+  $('#editBanner').hidden = true;
+  updateCounts();
+}
+
+$('#btnClear').addEventListener('click', () => {
+  if (hasContent() && !confirm('Limpar todas as respostas deste formulário?')) return;
+  resetForm();
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+});
+$('#btnCancelEdit').addEventListener('click', () => {
+  if (!confirm('Cancelar a edição? As alterações não salvas serão descartadas.')) return;
+  resetForm();
+});
+
+function startEdit(id) {
+  const r = loadRecords().find((x) => x.id === id);
+  if (!r) return;
+  if (hasContent() && editingId !== id && !confirm('O formulário atual tem respostas não salvas. Descartar e editar este registro?')) return;
+  editingId = id;
+  values = mergeValues(r.respostas);
+  fillForm();
+  $('#editLabel').textContent = 'WP ' + r.respostas.waypoint;
+  $('#editBanner').hidden = false;
+  saveDraft();
+  showView('form');
+  window.scrollTo({ top: 0 });
+}
+
+function updateCounts() {
+  const recs = loadRecords();
+  const pend = recs.filter((r) => !r.exportado).length;
+  $('#countBadge').textContent = recs.length;
+  $('#exportSummary').textContent = recs.length
+    ? `${recs.length} registro(s) no aparelho · ${pend} pendente(s) de exportação.`
+    : 'Nenhum registro salvo ainda.';
+}
+
+function renderList() {
+  updateCounts();
+  const recs = loadRecords();
+  const list = $('#list');
+  if (!recs.length) { list.innerHTML = '<p class="empty">Nenhum registro salvo ainda.</p>'; return; }
+  list.innerHTML = recs.map((r) => `
+    <article class="rec">
+      <div>
+        <div class="rec-title">WP ${esc(r.respostas.waypoint)}</div>
+        <div class="rec-sub">${esc(r.respostas.especificacao_poste)}</div>
+        <div class="rec-meta">${esc(fmtDate(r.criado_em))}${r.equipe ? ' · ' + esc(r.equipe) : ''}${r.atualizado_em !== r.criado_em ? ' · editado' : ''}</div>
+      </div>
+      <span class="tag ${r.exportado ? 'ok' : 'pend'}">${r.exportado ? 'Exportado' : 'Pendente'}</span>
+      <div class="rec-actions">
+        <button type="button" class="btn sm" data-act="edit" data-id="${r.id}">Editar</button>
+        <button type="button" class="btn sm danger" data-act="del" data-id="${r.id}">Excluir</button>
+      </div>
+    </article>`).join('');
+}
+
+$('#list').addEventListener('click', (e) => {
+  const b = e.target.closest('button[data-act]');
+  if (!b) return;
+  if (b.dataset.act === 'edit') return startEdit(b.dataset.id);
+  const recs = loadRecords();
+  const r = recs.find((x) => x.id === b.dataset.id);
+  if (!r) return;
+  const warn = r.exportado ? '' : '\n\nATENÇÃO: este registro ainda NÃO foi exportado.';
+  if (!confirm(`Excluir o registro WP ${r.respostas.waypoint}?${warn}`)) return;
+  saveRecords(recs.filter((x) => x.id !== r.id));
+  if (editingId === r.id) resetForm();
+  renderList();
+  toast('Registro excluído.');
+});
+
+/* ========================= Exportação ========================= */
+let scope = 'pend';
+$('#scope').addEventListener('click', (e) => {
+  const b = e.target.closest('[data-scope]'); if (!b) return;
+  scope = b.dataset.scope;
+  $$('#scope .chip').forEach((c) => c.setAttribute('aria-pressed', String(c === b)));
+});
+
+const META_COLS = ['id', 'equipe', 'criado_em', 'atualizado_em', 'versao_form'];
+function columns() {
+  const cols = [...META_COLS];
+  for (const q of QUESTIONS) {
+    if (q.type === 'pos') POS.forEach((p) => cols.push(`${q.id}_${p.k}`));
+    else { cols.push(q.id); if (q.other) cols.push(q.id + '_outro'); }
+  }
+  return cols;
+}
+function flatten(r) {
+  const o = {};
+  META_COLS.forEach((c) => { o[c] = r[c] ?? ''; });
+  for (const [k, v] of Object.entries(r.respostas || {})) {
+    if (v && typeof v === 'object') for (const [pk, pv] of Object.entries(v)) o[`${k}_${pk}`] = pv;
+    else o[k] = v;
+  }
+  return o;
+}
+function toCSV(recs) {
+  const cols = columns();
+  const cell = (v) => {
+    v = v == null ? '' : String(v);
+    return /[";\r\n]/.test(v) ? '"' + v.replace(/"/g, '""') + '"' : v;
+  };
+  const lines = [cols.join(';')];
+  for (const r of recs) { const f = flatten(r); lines.push(cols.map((c) => cell(f[c])).join(';')); }
+  return lines.join('\r\n');
+}
+
+async function shareOrDownload(blob, filename) {
+  const file = new File([blob], filename, { type: blob.type });
+  if (navigator.canShare && navigator.canShare({ files: [file] })) {
+    try { await navigator.share({ files: [file], title: filename }); return true; }
+    catch (e) { if (e.name === 'AbortError') return false; /* senão, tenta baixar */ }
+  }
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = filename;
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 4000);
+  return true;
+}
+
+async function doExport(fmt) {
+  const recs = loadRecords();
+  const sel = scope === 'pend' ? recs.filter((r) => !r.exportado) : recs;
+  const eq = team();
+  if (eq) sel.forEach((r) => { if (!r.equipe) r.equipe = eq; }); // registros salvos antes de informar a equipe
+  if (!sel.length) { toast(scope === 'pend' ? 'Não há registros pendentes. Escolha "Todos" para reexportar.' : 'Nenhum registro para exportar.', 'err'); return; }
+  const d = new Date(), p = (n) => String(n).padStart(2, '0');
+  const stamp = `${d.getFullYear()}${p(d.getMonth() + 1)}${p(d.getDate())}_${p(d.getHours())}${p(d.getMinutes())}`;
+  const name = `inspecoes_${slug(team()) || 'equipe'}_${stamp}.${fmt}`;
+  const blob = fmt === 'csv'
+    ? new Blob(['﻿' + toCSV(sel)], { type: 'text/csv' })
+    : new Blob([JSON.stringify(sel, null, 2)], { type: 'application/json' });
+  const ok = await shareOrDownload(blob, name);
+  if (!ok) return;
+  const ids = new Set(sel.map((r) => r.id));
+  recs.forEach((r) => { if (ids.has(r.id)) r.exportado = true; });
+  saveRecords(recs);
+  renderList();
+  toast(`${sel.length} registro(s) exportado(s) ✓`, 'ok');
+}
+$('#btnCsv').addEventListener('click', () => doExport('csv'));
+$('#btnJson').addEventListener('click', () => doExport('json'));
+
+$('#btnPurge').addEventListener('click', () => {
+  const recs = loadRecords();
+  const done = recs.filter((r) => r.exportado);
+  if (!done.length) { toast('Nenhum registro exportado para apagar.'); return; }
+  if (!confirm(`Apagar ${done.length} registro(s) já exportado(s) deste aparelho?\n\nConfirme antes que os arquivos exportados chegaram ao destino.`)) return;
+  saveRecords(recs.filter((r) => !r.exportado));
+  renderList();
+  toast(`${done.length} registro(s) apagado(s).`);
+});
+
+/* ========================= Navegação ========================= */
+function showView(v) {
+  $('#view-form').hidden = v !== 'form';
+  $('#view-records').hidden = v !== 'records';
+  $('#formActions').hidden = v !== 'form';
+  document.body.classList.toggle('on-records', v === 'records');
+  $$('.tab').forEach((t) => t.classList.toggle('active', t.dataset.view === v));
+  if (v === 'records') renderList();
+  window.scrollTo({ top: 0 });
+}
+$$('.tab').forEach((t) => t.addEventListener('click', () => showView(t.dataset.view)));
+
+const teamInput = $('#equipe');
+teamInput.value = team();
+teamInput.addEventListener('input', () => store.set(KEY.team, teamInput.value.trim()));
+
+/* ========================= Online / instalação ========================= */
+function updateNet() {
+  const el = $('#netStatus');
+  el.textContent = navigator.onLine ? 'Online' : 'Offline · salvando no aparelho';
+  el.classList.toggle('off', !navigator.onLine);
+}
+window.addEventListener('online', updateNet);
+window.addEventListener('offline', updateNet);
+
+const isStandalone = window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone === true;
+const isIOS = /iphone|ipad|ipod/i.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+let deferredPrompt = null;
+
+function showInstall(html) { $('#installText').innerHTML = html; $('#installBanner').hidden = false; }
+$('#installClose').addEventListener('click', () => { $('#installBanner').hidden = true; store.set(KEY.iosHint, true); });
+
+window.addEventListener('beforeinstallprompt', (e) => {
+  e.preventDefault();
+  deferredPrompt = e;
+  showInstall('<b>Instale o app</b> para usar sem internet. <button type="button" class="btn sm primary" id="btnInstall" style="margin-top:8px">Instalar</button>');
+  $('#btnInstall').onclick = async () => {
+    deferredPrompt.prompt();
+    await deferredPrompt.userChoice;
+    deferredPrompt = null;
+    $('#installBanner').hidden = true;
+  };
+});
+window.addEventListener('appinstalled', () => { $('#installBanner').hidden = true; });
+
+if (isIOS && !isStandalone && !store.get(KEY.iosHint, false)) {
+  showInstall('<b>Instale no iPhone:</b> no Safari, toque em <b>Compartilhar</b> (quadrado com seta para cima) e depois em <b>Adicionar à Tela de Início</b>.');
+}
+
+if ('serviceWorker' in navigator && location.protocol.startsWith('http')) {
+  const hadController = !!navigator.serviceWorker.controller;
+  navigator.serviceWorker.register('sw.js').catch(() => { /* sem SW: app funciona, mas não offline */ });
+  navigator.serviceWorker.addEventListener('controllerchange', () => {
+    if (hadController) toast('Nova versão do app disponível.', 'ok', { label: 'Atualizar', fn: () => location.reload() });
+  });
+}
+if (navigator.storage && navigator.storage.persist) navigator.storage.persist().catch(() => {});
+
+/* ========================= Início ========================= */
+renderForm();
+const draft = store.get(KEY.draft, null);
+if (draft && draft.values) {
+  values = mergeValues(draft.values);
+  editingId = draft.editingId || null;
+  if (editingId && !loadRecords().some((r) => r.id === editingId)) editingId = null;
+  if (editingId) {
+    $('#editLabel').textContent = 'WP ' + (values.waypoint || '');
+    $('#editBanner').hidden = false;
+  }
+}
+fillForm();
+updateCounts();
+updateNet();
+</script>
+</body>
+</html>
