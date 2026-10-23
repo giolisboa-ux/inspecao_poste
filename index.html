@@ -277,7 +277,7 @@
    showIf: { pergunta: valor } ou função (v) => true/false
                libera a pergunta só nessa condição (condHint = aviso)
    ========================================================= */
-const FORM_VERSION = 3;
+const FORM_VERSION = 4;
 
 /* Regra das perguntas de posição (exceto a 3):
    'todas'  -> toda posição liberada pela pergunta 3 precisa ser respondida
@@ -311,7 +311,8 @@ const QUESTIONS = [
   { id: 'estrutura_circuitos', n: 5, title: 'Estrutura e respectivos circuitos', type: 'pos', control: 'text', posFrom: P3 },
   { id: 'estado_montagem', n: 6, title: 'Estado da montagem', type: 'pos', control: 'choice', options: REG_IRREG, posFrom: P3 },
   { id: 'para_raios', n: 7, title: 'Existe Para-Raios?', type: 'pos', control: 'choice', options: SIM_NAO, posFrom: P3 },
-  { id: 'qtd_para_raios', n: 8, title: 'Quantos Para-Raios?', type: 'pos', control: 'select', options: nums(0, 6), posFrom: P3 },
+  { id: 'qtd_para_raios', n: 8, title: 'Quantos Para-Raios?', type: 'pos', control: 'select', options: nums(0, 6), posFrom: P3,
+    posIf: (v, k) => v.para_raios[k] === 'SIM', hint: 'Aparece nas posições com SIM na pergunta 7', noneHint: 'Nenhuma posição com SIM na pergunta 7.' },
   { id: 'estado_para_raio', n: 9, title: 'Estado da Montagem do Para-Raio', type: 'pos', control: 'choice', options: REG_IRREG, posFrom: P3,
     posIf: (v, k) => v.para_raios[k] === 'SIM', hint: 'Aparece nas posições com SIM na pergunta 7', noneHint: 'Nenhuma posição com SIM na pergunta 7.' },
   { id: 'aterramento_temp', n: 10, title: 'Existe Ponto de Aterramento Temporário?', type: 'pos', control: 'choice', options: SIM_NAO, posFrom: P3 },
