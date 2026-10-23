@@ -214,7 +214,7 @@
       </div>
       <button type="button" class="btn sm" id="btnGps">Atualizar</button>
     </div>
-    <p class="intro">Perguntas com <span class="req">*</span> são obrigatórias. O preenchimento fica salvo automaticamente como rascunho, mesmo se o app for fechado.</p>
+    <p class="intro">Perguntas com <span class="req">*</span> são obrigatórias. NÃO FECHAR A PAGINA QUANDO ESTIVER OFFLINE.</p>
     <form id="form" novalidate autocomplete="off"></form>
   </section>
 
@@ -223,7 +223,7 @@
     <div class="card">
       <label for="equipe">Equipe / responsável</label>
       <input id="equipe" class="inp" type="text" placeholder="Ex.: Equipe 03 - João">
-      <p class="hint">Vai junto em cada registro novo, para identificar quem coletou.</p>
+      <p class="hint">Vai junto em cada registro novo, para identificar quem coletou. Ex:Joao/Pedro/Paulo </p>
     </div>
 
     <div class="card">
@@ -301,23 +301,23 @@ const P3 = 'circuitos_posicao'; // pergunta que libera as posições
 
 const QUESTIONS = [
   { id: 'waypoint', n: 1, title: 'Nome WayPoint GPS', type: 'text', numeric: true, required: true, placeholder: 'Somente números' },
-  { id: 'especificacao_poste', n: 2, title: 'Especificação do Poste', type: 'text', required: true },
+  { id: 'especificacao_poste', n: 2, title: 'Especificação do Poste - Metros/Esforço', type: 'text', required: true },
   { id: P3, n: 3, title: 'Quais circuitos e qual posição?', type: 'pos', control: 'text',
     hint: 'Preencha pelo menos 1 posição. Só as posições com circuito aparecem nas perguntas seguintes.' },
-  { id: 'equipamento', n: 4, title: 'Possui Equipamentos?', type: 'select', required: true,
+  { id: 'equipamento', n: 4, title: 'Equipamentos?', type: 'select', required: true,
     options: ['TRAFO', 'SF6', 'CHAVE FACA', 'CHAVE FUSIVEL', 'CHAVE RELIGADORA', 'BANCO CAPACITOR', 'OUTRO', NAO_POSSUI], other: 'OUTRO' },
   { id: 'tag_equipamento', n: '4.1', title: 'Qual a TAG do Equipamento?', type: 'text', required: true,
-    showIf: (v) => v.equipamento !== '' && v.equipamento !== NAO_POSSUI, condHint: `Liberada quando a pergunta 4 tiver um equipamento (diferente de ${NAO_POSSUI})` },
-  { id: 'estrutura_circuitos', n: 5, title: 'Estrutura e respectivos circuitos', type: 'pos', control: 'text', posFrom: P3 },
-  { id: 'estado_montagem', n: 6, title: 'Estado da montagem', type: 'pos', control: 'choice', options: REG_IRREG, posFrom: P3 },
+    showIf: (v) => v.equipamento !== '' && v.equipamento !== NAO_POSSUI, condHint: `Liberada quando a pergunta 4 tiver um equipamento` },
+  { id: 'estrutura_circuitos', n: 5, title: 'Estruturas', type: 'pos', control: 'text', posFrom: P3 },
+  { id: 'estado_montagem', n: 6, title: 'Estado da montagem das Estruturas', type: 'pos', control: 'choice', options: REG_IRREG, posFrom: P3 },
   { id: 'para_raios', n: 7, title: 'Existe Para-Raios?', type: 'pos', control: 'choice', options: SIM_NAO, posFrom: P3 },
   { id: 'qtd_para_raios', n: 8, title: 'Quantos Para-Raios?', type: 'pos', control: 'select', options: nums(0, 6), posFrom: P3,
-    posIf: (v, k) => v.para_raios[k] === 'SIM', hint: 'Aparece nas posições com SIM na pergunta 7', noneHint: 'Nenhuma posição com SIM na pergunta 7.' },
+    posIf: (v, k) => v.para_raios[k] === 'SIM', hint: 'Aparece nas respotas SIM na pergunta 7', noneHint: 'Nenhuma resposta SIM na pergunta 7.' },
   { id: 'estado_para_raio', n: 9, title: 'Estado da Montagem do Para-Raio', type: 'pos', control: 'choice', options: REG_IRREG, posFrom: P3,
-    posIf: (v, k) => v.para_raios[k] === 'SIM', hint: 'Aparece nas posições com SIM na pergunta 7', noneHint: 'Nenhuma posição com SIM na pergunta 7.' },
+    posIf: (v, k) => v.para_raios[k] === 'SIM', hint: 'Aparece nas repostas SIM na pergunta 7', noneHint: 'Nenhuma resposta SIM na pergunta 7.' },
   { id: 'aterramento_temp', n: 10, title: 'Existe Ponto de Aterramento Temporário?', type: 'pos', control: 'choice', options: SIM_NAO, posFrom: P3 },
   { id: 'estado_aterramento_temp', n: 11, title: 'Qual estado do Aterramento Temporário?', type: 'pos', control: 'choice', options: REG_IRREG, posFrom: P3,
-    posIf: (v, k) => v.aterramento_temp[k] === 'SIM', hint: 'Aparece nas posições com SIM na pergunta 10', noneHint: 'Nenhuma posição com SIM na pergunta 10.' },
+    posIf: (v, k) => v.aterramento_temp[k] === 'SIM', hint: 'Aparece nas respotas SIM na pergunta 10', noneHint: 'Nenhuma resposta SIM na pergunta 10.' },
   { id: 'emenda', n: 12, title: 'Existe Emenda?', type: 'choice', options: SIM_NAO, required: true },
   { id: 'local_emenda', n: 13, title: 'A emenda é no poste ou no vão anterior?', type: 'choice', options: ['POSTE', 'VÃO ANTERIOR'], required: true, showIf: { emenda: 'SIM' } },
   { id: 'tipo_emenda', n: 14, title: 'Tipo de Emenda', type: 'select', options: ['LUVA', 'CUNHA', 'CAPA', 'PERFURANTE', 'OUTRO'], other: 'OUTRO', required: true, showIf: { emenda: 'SIM' } },
@@ -325,7 +325,7 @@ const QUESTIONS = [
   { id: 'qtd_espacadores', n: 16, title: 'Quantos Espaçadores no vão anterior?', type: 'pos', control: 'select', options: [...nums(0, 12), 'NA'], posFrom: P3 },
   { id: 'tipo_espacador', n: 17, title: 'Tipo do Espaçador', type: 'pos', control: 'choice', options: ['PLP', 'ANCORA', 'OUTRA'], other: 'OUTRA', posFrom: P3,
     posIf: (v, k) => v.qtd_espacadores[k] !== '' && v.qtd_espacadores[k] !== '0',
-    hint: 'Aparece nas posições em que a pergunta 16 for diferente de 0', noneHint: 'Nenhuma posição com espaçador (diferente de 0) na pergunta 16.' },
+    hint: 'Aparece nas posições em que a pergunta 16 for diferente de 0', noneHint: 'Nenhuma resposta espaçador (diferente de 0) na pergunta 16.' },
   { id: 'baixa_tensao', n: 18, title: 'Existe Baixa Tensão?', type: 'choice', options: SIM_NAO, required: true },
   { id: 'iluminacao_viaria', n: 19, title: 'Existe Iluminação Viária?', type: 'choice', options: SIM_NAO, required: true },
   { id: 'fibra_optica', n: 20, title: 'Existe Fibra Óptica?', type: 'choice', options: SIM_NAO, required: true },
